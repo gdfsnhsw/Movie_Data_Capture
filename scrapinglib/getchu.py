@@ -3,6 +3,8 @@
 import re
 import json
 from urllib.parse import quote
+
+from scrapinglib import httprequest
 from .parser import Parser
 
 
@@ -52,8 +54,7 @@ class wwwGetchu(Parser):
             idn = re.findall('\d+',number)[0]
             return "http://www.getchu.com/soft.phtml?id=" + idn
         else:
-            self.number = quote(number, encoding="euc_jp")
-            queryUrl = self.GETCHU_WWW_SEARCH_URL.replace("_WORD_", self.number)
+            queryUrl = self.GETCHU_WWW_SEARCH_URL.replace("_WORD_", quote(number, encoding="euc_jp"))
         # NOTE dont know why will try 2 times
         retry = 2
         for i in range(retry):
@@ -64,6 +65,18 @@ class wwwGetchu(Parser):
         if detailurl == "":
             return None
         return detailurl.replace('../', 'http://www.getchu.com/')
+
+    def getHtml(self, url, type = None):
+        """ 访问网页(指定EUC-JP)
+        """
+        resp = httprequest.get(url, cookies=self.cookies, proxies=self.proxies, extra_headers=self.extraheader, encoding='euc_jis_2004', verify=self.verify, return_type=type)
+        if '<title>404 Page Not Found' in resp \
+            or '<title>未找到页面' in resp \
+            or '404 Not Found' in resp \
+            or '<title>404' in resp \
+            or '<title>お探しの商品が見つかりません' in resp:
+            return 404
+        return resp
 
     def getNum(self, htmltree):
         return 'GETCHU-' + re.findall('\d+', self.detailurl.replace("http://www.getchu.com/soft.phtml?id=", ""))[0]
@@ -78,6 +91,12 @@ class wwwGetchu(Parser):
             outline = outline + i.strip()
         return outline
 
+    def getCover(self, htmltree):
+        url = super().getCover(htmltree)
+        if "getchu.com" in url:
+            return url
+        return "http://www.getchu.com" + url
+
     def getExtrafanart(self, htmltree):
         arts = super().getExtrafanart(htmltree)
         extrafanart = []
@@ -90,8 +109,14 @@ class wwwGetchu(Parser):
     def extradict(self, dic: dict):
         """ 额外新增的  headers
         """
-        dic['headers'] =  {'referer': self.detailurl}
+        dic['headers'] = {'referer': self.detailurl}
         return dic
+
+    def getTags(self, htmltree):
+        tags = super().getTags(htmltree)
+        tags.append("Getchu")
+        return tags
+
 
 class dlGetchu(wwwGetchu):
     """ 二者基本一致
@@ -135,7 +160,7 @@ class dlGetchu(wwwGetchu):
 
     def extradict(self, dic: dict):
         return dic
-    
+
     def getExtrafanart(self, htmltree):
         arts = self.getTreeAll(htmltree, self.expr_extrafanart)
         extrafanart = []
@@ -143,3 +168,8 @@ class dlGetchu(wwwGetchu):
             i = "https://dl.getchu.com" + i
             extrafanart.append(i)
         return extrafanart
+
+    def getTags(self, htmltree):
+        tags = super().getTags(htmltree)
+        tags.append("Getchu")
+        return tags

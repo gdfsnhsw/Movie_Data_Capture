@@ -7,7 +7,7 @@ import typing
 G_spat = re.compile(
     "^\w+\.(cc|com|net|me|club|jp|tv|xyz|biz|wiki|info|tw|us|de)@|^22-sht\.me|"
     "^(fhd|hd|sd|1080p|720p|4K)(-|_)|"
-    "(-|_)(fhd|hd|sd|1080p|720p|4K|x264|x265|uncensored|leak)",
+    "(-|_)(fhd|hd|sd|1080p|720p|4K|x264|x265|uncensored|hack|leak)",
     re.IGNORECASE)
 
 
@@ -40,6 +40,15 @@ def get_number(debug: bool, file_path: str) -> str:
     filepath = os.path.basename(file_path)
     # debug True 和 False 两块代码块合并，原因是此模块及函数只涉及字符串计算，没有IO操作，debug on时输出导致异常信息即可
     try:
+        # 先对自定义正则进行匹配
+        if config.getInstance().number_regexs().split().__len__() > 0:
+            for regex in config.getInstance().number_regexs().split():
+                try:
+                    if re.search(regex, filepath):
+                        return re.search(regex, filepath).group()
+                except Exception as e:
+                    print(f'[-]custom regex exception: {e} [{regex}]')
+
         file_number = get_number_by_dict(filepath)
         if file_number:
             return file_number
@@ -54,15 +63,28 @@ def get_number(debug: bool, file_path: str) -> str:
             filename = str(re.sub("\[\d{4}-\d{1,2}-\d{1,2}\] - ", "", filepath))  # 去除文件名中时间
             lower_check = filename.lower()
             if 'fc2' in lower_check:
-                filename = lower_check.replace('ppv', '').replace('--', '-').replace('_', '-').upper()
+                filename = lower_check.replace('--', '-').replace('_', '-').upper()
             filename = re.sub("[-_]cd\d{1,2}", "", filename, flags=re.IGNORECASE)
             if not re.search("-|_", filename): # 去掉-CD1之后再无-的情况，例如n1012-CD1.wmv
                 return str(re.search(r'\w+', filename[:filename.find('.')], re.A).group())
-            file_number = str(re.search(r'\w+(-|_)\w+', filename, re.A).group())
-            file_number = re.sub("(-|_)c$", "", file_number, flags=re.IGNORECASE)
-            if re.search("\d+ch$", file_number, flags=re.I):
-                file_number = file_number[:-2]
-            return file_number.upper()
+            file_number =  os.path.splitext(filename)
+            filename = re.search(r'[\w\-_]+', filename, re.A)
+            if filename:
+                file_number = str(filename.group())
+            else:
+                file_number = file_number[0]
+            
+            new_file_number = file_number
+            if re.search("-c", file_number, flags=re.IGNORECASE):
+                new_file_number = re.sub("(-|_)c$", "", file_number, flags=re.IGNORECASE)
+            elif re.search("-u$", file_number, flags=re.IGNORECASE):
+                new_file_number = re.sub("(-|_)u$", "", file_number, flags=re.IGNORECASE)
+            elif re.search("-uc$", file_number, flags=re.IGNORECASE):
+                new_file_number = re.sub("(-|_)uc$", "", file_number, flags=re.IGNORECASE)
+            elif re.search("\d+ch$", file_number, flags=re.I):
+                new_file_number = file_number[:-2]
+                
+            return new_file_number.upper()
         else:  # 提取不含减号-的番号，FANZA CID
             # 欧美番号匹配规则
             oumei = re.search(r'[a-zA-Z]+\.\d{2}\.\d{2}\.\d{2}', filepath)
@@ -80,32 +102,7 @@ def get_number(debug: bool, file_path: str) -> str:
             print(f'[-]Number Parser exception: {e} [{file_path}]')
         return None
         
-# modou提取number
-def md(filename):
-    m = re.search(r'(md[a-z]{0,2}-?)(\d{2,})(-ep\d*)*', filename, re.I)
-    return f'{m.group(1).replace("-","").upper()}{m.group(2).zfill(4)}{m.group(3) or ""}'
 
-def mmz(filename):
-    m = re.search(r'(mmz-?)(\d{2,})(-ep\d*)*', filename, re.I)
-    return f'{m.group(1).replace("-","").upper()}{m.group(2).zfill(3)}{m.group(3) or ""}'
-
-def msd(filename):
-    m = re.search(r'(msd-?)(\d{2,})(-ep\d*)*', filename, re.I)
-    return f'{m.group(1).replace("-","").upper()}{m.group(2).zfill(3)}{m.group(3) or ""}'
-
-def mky(filename):
-    m = re.search(r'(mky-[a-z]{2,2}-?)(\d{2,})(-ep\d*)*', filename, re.I)
-    return f'{m.group(1).replace("-","").upper()}{m.group(2).zfill(3)}{m.group(3) or ""}'
-
-def yk(filename):
-    m = re.search(r'(yk-?)(\d{2,})(-ep\d*)*', filename, re.I)
-    return f'{m.group(1).replace("-","").upper()}{m.group(2).zfill(3)}{m.group(3) or ""}'
-
-def pm(filename):
-    m = re.search(r'(pm[a-z]?-?)(\d{2,})(-ep\d*)*', filename, re.I)
-    return f'{m.group(1).replace("-","").upper()}{m.group(2).zfill(3)}{m.group(3) or ""}'   
-   
-   
 
 # 按javdb数据源的命名规范提取number
 G_TAKE_NUM_RULES = {
@@ -117,12 +114,9 @@ G_TAKE_NUM_RULES = {
     'xxx-av': lambda x: ''.join(['xxx-av-', re.findall(r'xxx-av[^\d]*(\d{3,5})[^\d]*', x, re.I)[0]]),
     'heydouga': lambda x: 'heydouga-' + '-'.join(re.findall(r'(\d{4})[\-_](\d{3,4})[^\d]*', x, re.I)[0]),
     'heyzo': lambda x: 'HEYZO-' + re.findall(r'heyzo[^\d]*(\d{4})', x, re.I)[0],
-    r'\bmd[a-z]{0,2}-\d{2,}': md,
-    r'\bmmz-\d{2,}':mmz,
-    r'\bmsd-\d{2,}':msd,
-    r'\bmky-[a-z]{2,2}-\d{2,}':mky,
-    r'\byk-\d{2,3}': yk,
-    r'\bpm[a-z]?-?\d{2,}':pm
+    'mdbk': lambda x: str(re.search(r'mdbk(-|_)(\d{4})', x, re.I).group()),
+    'mdtm': lambda x: str(re.search(r'mdtm(-|_)(\d{4})', x, re.I).group()),
+    'caribpr': lambda x: str(re.search(r'\d{6}(-|_)\d{3}', x, re.I).group()).replace('_', '-'),
 }
 
 
